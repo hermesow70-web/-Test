@@ -65,40 +65,55 @@ async def start(message: types.Message, state: FSMContext):
         reply_markup=welcome_keyboard()
     )
 
+
 # ==================== КАТЕГОРИИ ====================
 @dp.callback_query(F.data == "categories")
 async def show_categories(callback: types.CallbackQuery):
-    await callback.message.edit_text(
-        "📂 *Категории товаров*\n\nВыберите категорию:",
-        parse_mode="Markdown",
-        reply_markup=categories_keyboard()
-    )
-    await callback.answer()
-
-@dp.callback_query(F.data.startswith("category_"))
-async def show_products(callback: types.CallbackQuery):
-    category_id = int(callback.data.split("_")[1])
-
     session = Session()
-    category = session.query(Category).get(category_id)
-    products = session.query(Product).filter_by(category_id=category_id).all()
+    products = session.query(Product).all()
     session.close()
 
     if not products:
         await callback.message.edit_text(
-            f"📂 *{category.name}*\n\nВ этой категории пока нет товаров.",
+            "📂 *Товары*\n\nВ магазине пока нет товаров.",
             parse_mode="Markdown",
-            reply_markup=back_to_categories_keyboard()
+            reply_markup=back_to_menu_keyboard()
         )
         await callback.answer()
         return
 
+    text = "📂 *Наши товары:*\n\n"
+    for p in products:
+        stock_emoji = "🟢" if p.stock > 0 else "🔴"
+        text += f"• {p.name} | {p.price}$ | {stock_emoji} {p.stock}шт\n"
+
     await callback.message.edit_text(
-        f"📂 *{category.name}*\n\nВыберите товар:",
+        text,
         parse_mode="Markdown",
-        reply_markup=products_keyboard(products, category_id)
+        reply_markup=products_list_keyboard(products)
     )
     await callback.answer()
+
+
+def products_list_keyboard(products):
+    buttons = []
+    for p in products:
+        buttons.append([
+            InlineKeyboardButton(
+                text=f"{p.name} | {p.price}$",
+                callback_data=f"product_{p.id}",
+                style="primary" if p.stock > 0 else "danger"
+            )
+        ])
+    buttons.append([
+        InlineKeyboardButton(
+            text="◀️ Назад в меню",
+            callback_data="back_to_welcome",
+            style="danger"
+        )
+    ])
+    return InlineKeyboardMarkup(inline_keyboard=buttons)
+
 
 # ==================== ТОВАР ====================
 @dp.callback_query(F.data.startswith("product_"))
@@ -138,6 +153,7 @@ async def show_product(callback: types.CallbackQuery):
         )
     await callback.answer()
 
+
 # ==================== ПОКУПКА ====================
 @dp.callback_query(F.data.startswith("buy_now_"))
 async def buy_product(callback: types.CallbackQuery):
@@ -174,6 +190,7 @@ async def buy_product(callback: types.CallbackQuery):
         reply_markup=buy_confirm_keyboard(product_id)
     )
     await callback.answer()
+
 
 @dp.callback_query(F.data.startswith("confirm_buy_"))
 async def confirm_buy(callback: types.CallbackQuery):
@@ -218,6 +235,7 @@ async def confirm_buy(callback: types.CallbackQuery):
     )
     await callback.answer("🎉 Поздравляем с покупкой!")
 
+
 # ==================== ПРОФИЛЬ ====================
 @dp.callback_query(F.data == "profile")
 async def show_profile(callback: types.CallbackQuery):
@@ -239,6 +257,7 @@ async def show_profile(callback: types.CallbackQuery):
         reply_markup=profile_keyboard()
     )
     await callback.answer()
+
 
 @dp.callback_query(F.data == "my_orders")
 async def my_orders(callback: types.CallbackQuery):
@@ -263,6 +282,7 @@ async def my_orders(callback: types.CallbackQuery):
     await callback.message.edit_text(text, parse_mode="Markdown", reply_markup=back_to_profile_keyboard())
     await callback.answer()
 
+
 # ==================== ПОПОЛНЕНИЕ ====================
 @dp.callback_query(F.data == "deposit")
 async def deposit_start(callback: types.CallbackQuery, state: FSMContext):
@@ -276,6 +296,7 @@ async def deposit_start(callback: types.CallbackQuery, state: FSMContext):
     )
     await state.set_state(ShopStates.deposit_amount)
     await callback.answer()
+
 
 @dp.message(ShopStates.deposit_amount)
 async def process_deposit_amount(message: types.Message, state: FSMContext):
@@ -327,6 +348,7 @@ async def process_deposit_amount(message: types.Message, state: FSMContext):
         print(f"Ошибка: {e}")
         await state.set_state(ShopStates.browsing)
 
+
 # ==================== ИНФОРМАЦИЯ ====================
 @dp.callback_query(F.data == "info")
 async def show_info(callback: types.CallbackQuery):
@@ -341,6 +363,7 @@ async def show_info(callback: types.CallbackQuery):
         reply_markup=back_to_menu_keyboard()
     )
     await callback.answer()
+
 
 # ==================== ПОДДЕРЖКА ====================
 @dp.callback_query(F.data == "support")
@@ -359,6 +382,7 @@ async def show_support(callback: types.CallbackQuery):
     )
     await callback.answer()
 
+
 @dp.callback_query(F.data == "submit_ticket")
 async def submit_ticket(callback: types.CallbackQuery, state: FSMContext):
     await callback.message.edit_text(
@@ -370,6 +394,7 @@ async def submit_ticket(callback: types.CallbackQuery, state: FSMContext):
     )
     await state.set_state(ShopStates.support_ticket)
     await callback.answer()
+
 
 @dp.message(ShopStates.support_ticket)
 async def process_ticket(message: types.Message, state: FSMContext):
@@ -404,6 +429,7 @@ async def process_ticket(message: types.Message, state: FSMContext):
     )
     await state.set_state(ShopStates.browsing)
 
+
 # ==================== АДМИН-ПАНЕЛЬ ====================
 @dp.message(Command("adm"))
 async def admin_panel(message: types.Message, state: FSMContext):
@@ -412,6 +438,7 @@ async def admin_panel(message: types.Message, state: FSMContext):
         return
     await show_admin_panel(message)
     await state.set_state(ShopStates.browsing)
+
 
 @dp.message(Command("add_balance"))
 async def add_balance(message: types.Message):
@@ -449,12 +476,14 @@ async def add_balance(message: types.Message):
     except:
         await message.answer("❌ Ошибка! Используй: /add_balance <id> <сумма>")
 
+
 @dp.callback_query(F.data == "admin_mailing")
 async def admin_mailing(callback: types.CallbackQuery, state: FSMContext):
     if not is_admin(callback.from_user.id):
         await callback.answer("❌ Нет доступа")
         return
     await start_mailing(callback, state)
+
 
 @dp.message(ShopStates.admin_mailing)
 async def process_admin_mailing(message: types.Message, state: FSMContext):
@@ -463,6 +492,7 @@ async def process_admin_mailing(message: types.Message, state: FSMContext):
         return
     await process_mailing(message, state, bot)
 
+
 @dp.callback_query(F.data == "admin_add_product")
 async def admin_add_product(callback: types.CallbackQuery, state: FSMContext):
     if not is_admin(callback.from_user.id):
@@ -470,11 +500,13 @@ async def admin_add_product(callback: types.CallbackQuery, state: FSMContext):
         return
     await add_product_start(callback, state)
 
+
 @dp.message(ShopStates.admin_add_product_category)
 async def admin_add_product_category(message: types.Message, state: FSMContext):
     if not is_admin(message.from_user.id):
         return
     await process_add_product_category(message, state)
+
 
 @dp.message(ShopStates.admin_add_product_name)
 async def admin_add_product_name(message: types.Message, state: FSMContext):
@@ -482,11 +514,13 @@ async def admin_add_product_name(message: types.Message, state: FSMContext):
         return
     await process_add_product_name(message, state)
 
+
 @dp.message(ShopStates.admin_add_product_description)
 async def admin_add_product_description(message: types.Message, state: FSMContext):
     if not is_admin(message.from_user.id):
         return
     await process_add_product_description(message, state)
+
 
 @dp.message(ShopStates.admin_add_product_price)
 async def admin_add_product_price(message: types.Message, state: FSMContext):
@@ -494,17 +528,20 @@ async def admin_add_product_price(message: types.Message, state: FSMContext):
         return
     await process_add_product_price(message, state)
 
+
 @dp.message(ShopStates.admin_add_product_stock)
 async def admin_add_product_stock(message: types.Message, state: FSMContext):
     if not is_admin(message.from_user.id):
         return
     await process_add_product_stock(message, state)
 
+
 @dp.message(ShopStates.admin_add_product_photo)
 async def admin_add_product_photo(message: types.Message, state: FSMContext):
     if not is_admin(message.from_user.id):
         return
     await process_add_product_photo(message, state, bot)
+
 
 @dp.callback_query(F.data == "admin_users")
 async def admin_users(callback: types.CallbackQuery):
@@ -513,6 +550,7 @@ async def admin_users(callback: types.CallbackQuery):
         return
     await show_users(callback)
 
+
 @dp.callback_query(F.data == "admin_stats")
 async def admin_stats(callback: types.CallbackQuery):
     if not is_admin(callback.from_user.id):
@@ -520,12 +558,14 @@ async def admin_stats(callback: types.CallbackQuery):
         return
     await show_stats(callback)
 
+
 @dp.message(Command("add_category"))
 async def add_category(message: types.Message):
     if not is_admin(message.from_user.id):
         await message.answer("❌ Нет доступа")
         return
     await add_category_command(message)
+
 
 # ==================== НАЗАД ====================
 @dp.callback_query(F.data == "back_to_welcome")
@@ -542,48 +582,17 @@ async def back_to_welcome(callback: types.CallbackQuery, state: FSMContext):
     )
     await callback.answer()
 
-@dp.callback_query(F.data == "back_to_categories")
-async def back_to_categories(callback: types.CallbackQuery):
-    await callback.message.edit_text(
-        "📂 *Категории товаров*\n\nВыберите категорию:",
-        parse_mode="Markdown",
-        reply_markup=categories_keyboard()
-    )
-    await callback.answer()
 
 @dp.callback_query(F.data == "back_to_profile")
 async def back_to_profile_callback(callback: types.CallbackQuery):
     await show_profile(callback)
     await callback.answer()
 
-@dp.callback_query(F.data.startswith("back_to_products_"))
-async def back_to_products(callback: types.CallbackQuery):
-    product_id = int(callback.data.split("_")[3])
-
-    session = Session()
-    product = session.query(Product).get(product_id)
-    category_id = product.category_id if product else None
-    session.close()
-
-    if category_id:
-        session = Session()
-        category = session.query(Category).get(category_id)
-        products = session.query(Product).filter_by(category_id=category_id).all()
-        session.close()
-
-        await callback.message.delete()
-        await callback.message.answer(
-            f"📂 *{category.name}*\n\nВыберите товар:",
-            parse_mode="Markdown",
-            reply_markup=products_keyboard(products, category_id)
-        )
-    else:
-        await show_categories(callback)
-    await callback.answer()
 
 @dp.callback_query(F.data == "no_stock")
 async def no_stock(callback: types.CallbackQuery):
     await callback.answer("❌ Товара нет в наличии!")
+
 
 # ==================== НЕИЗВЕСТНЫЕ ====================
 @dp.message()
@@ -593,11 +602,13 @@ async def unknown_message(message: types.Message):
         reply_markup=welcome_keyboard()
     )
 
+
 # ==================== ЗАПУСК ====================
 async def main():
     print("🚀 Бот Kosmos Shop запускается в режиме polling...")
     print("✅ Бот готов к работе!")
     await dp.start_polling(bot)
+
 
 if __name__ == "__main__":
     asyncio.run(main())
