@@ -1,4 +1,37 @@
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+
+
+def welcome_keyboard():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(
+                text="📂 Категории",
+                callback_data="categories",
+                style="success"
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                text="ℹ️ Информация",
+                callback_data="info",
+                style="primary"
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                text="🔄 Замены/Тех Поддержка",
+                callback_data="support",
+                style="danger"
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                text="👤 Профиль",
+                callback_data="profile",
+                style="primary"
+            )
+        ]
+    ])
 
 
 def product_detail_keyboard(product_id, in_stock=True):
@@ -68,7 +101,7 @@ def profile_keyboard():
         ],
         [
             InlineKeyboardButton(
-                text="◀️ Назад",
+                text="◀️ Назад в меню",
                 callback_data="back_to_welcome",
                 style="danger"
             )
@@ -83,6 +116,44 @@ def cancel_deposit_keyboard():
                 text="❌ Отменить пополнение",
                 callback_data="back_to_welcome",
                 style="danger"
+            )
+        ]
+    ])
+
+
+def support_keyboard():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(
+                text="📝 Подать заявку",
+                callback_data="submit_ticket",
+                style="primary"
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                text="👨‍💼 Написать менеджеру",
+                url="https://t.me/KosmossShop_Supp",
+                style="success"
+            )
+        ],
+        [
+            InlineKeyboardButton(
+                text="◀️ Назад в меню",
+                callback_data="back_to_welcome",
+                style="danger"
+            )
+        ]
+    ])
+
+
+def ticket_sent_keyboard():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(
+                text="◀️ Назад в меню",
+                callback_data="back_to_welcome",
+                style="primary"
             )
         ]
     ])
@@ -123,6 +194,18 @@ def admin_keyboard():
                 text="◀️ Выход",
                 callback_data="back_to_welcome",
                 style="danger"
+            )
+        ]
+    ])
+
+
+def back_to_menu_keyboard():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(
+                text="◀️ Назад в меню",
+                callback_data="back_to_welcome",
+                style="primary"
             )
         ]
     ])
