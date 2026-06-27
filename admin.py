@@ -13,10 +13,17 @@ from states import ShopStates
 
 
 def is_admin(user_id: int) -> bool:
-    session = Session()
-    user = session.query(User).filter_by(telegram_id=user_id).first()
-    session.close()
-    return user and user.is_admin
+    """Проверка, является ли пользователь админом"""
+    try:
+        session = Session()
+        user = session.query(User).filter_by(telegram_id=user_id).first()
+        session.close()
+        
+        if user and user.is_admin:
+            return True
+        return False
+    except:
+        return False
 
 
 async def show_admin_panel(message: types.Message, edit: bool = False):
