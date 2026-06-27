@@ -3,7 +3,7 @@ import csv
 import io
 from datetime import datetime
 
-from aiogram import types, F
+from aiogram import types
 from aiogram.fsm.context import FSMContext
 from sqlalchemy import func
 
