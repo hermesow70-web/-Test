@@ -54,6 +54,7 @@ def admin_menu():
         [InlineKeyboardButton(text="📨 Рассылка", callback_data="admin_mailing", style="primary")],
         [InlineKeyboardButton(text="👥 Пользователи", callback_data="admin_users", style="primary")],
         [InlineKeyboardButton(text="📊 Статистика", callback_data="admin_stats", style="primary")],
+        [InlineKeyboardButton(text="📋 Заявки", callback_data="admin_tickets", style="primary")],
         [InlineKeyboardButton(text="◀️ Выход", callback_data="back_to_main", style="danger")]
     ])
 
@@ -106,6 +107,28 @@ async def back_to_main(callback: types.CallbackQuery, state: FSMContext):
         "🌟 Осваивайся, удачного ворка! 💪",
         parse_mode="Markdown",
         reply_markup=main_menu()
+    )
+    await callback.answer()
+
+@dp.callback_query(F.data == "admin_panel")
+async def back_to_admin_panel(callback: types.CallbackQuery, state: FSMContext):
+    if not is_admin(callback.from_user.id):
+        await callback.answer("❌ Нет доступа")
+        return
+    
+    await state.clear()
+    await state.set_state(ShopStates.browsing)
+    
+    session = Session()
+    users_count = session.query(User).count()
+    orders_count = session.query(Order).count()
+    total_revenue = session.query(Order).filter_by(status='paid').with_entities(func.sum(Order.total)).scalar() or 0
+    session.close()
+
+    await callback.message.edit_text(
+        f"🔐 *Админ-панель*\n\n👥 Всего пользователей: {users_count}\n📦 Всего заказов: {orders_count}\n💰 Общая выручка: {round(total_revenue, 2)}$\n\nВыберите действие:",
+        parse_mode="Markdown",
+        reply_markup=admin_menu()
     )
     await callback.answer()
 
@@ -225,26 +248,239 @@ async def support_handler(callback: types.CallbackQuery):
 async def submit_ticket(callback: types.CallbackQuery, state: FSMContext):
     await callback.message.edit_text(
         "📝 *Подача заявки*\n\nОпишите вашу проблему подробно.\nМы свяжемся с вами в ближайшее время.\n\n❌ Для отмены отправьте /cancel",
-        parse_mode="Markdown"
+        parse_mode="Markdown",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="❌ Отменить", callback_data="back_to_main", style="danger")]
+        ])
     )
     await state.set_state(ShopStates.support_ticket)
     await callback.answer()
 
 @dp.message(ShopStates.support_ticket)
 async def process_ticket(message: types.Message, state: FSMContext):
+    if not message.text or len(message.text.strip()) == 0:
+        await message.answer(
+            "❌ Сообщение не может быть пустым!\n\nОпишите вашу проблему:",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="❌ Отменить", callback_data="back_to_main", style="danger")]
+            ])
+        )
+        return
+    
+    if len(message.text.strip()) < 10:
+        await message.answer(
+            "❌ Сообщение слишком короткое (минимум 10 символов).\n\nОпишите проблему подробнее:",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="❌ Отменить", callback_data="back_to_main", style="danger")]
+            ])
+        )
+        return
+    
     session = Session()
     user = session.query(User).filter_by(telegram_id=message.from_user.id).first()
+    
+    if not user:
+        session.close()
+        await message.answer(
+            "❌ Пользователь не найден. Используйте /start",
+            reply_markup=main_menu()
+        )
+        await state.clear()
+        await state.set_state(ShopStates.browsing)
+        return
 
-    ticket = SupportTicket(user_id=user.id, message=message.text, status='open')
-    session.add(ticket)
-    session.commit()
+    try:
+        ticket = SupportTicket(
+            user_id=user.id, 
+            message=message.text.strip(), 
+            status='open',
+            created_at=datetime.now()
+        )
+        session.add(ticket)
+        session.commit()
+        
+        admin_notification = (
+            f"📨 *Новая заявка в поддержку!*\n\n"
+            f"🆔 ID заявки: {ticket.id}\n"
+            f"👤 Пользователь: {message.from_user.first_name}\n"
+            f"🆔 Telegram ID: {message.from_user.id}\n"
+            f"👤 Username: @{message.from_user.username or 'Не указан'}\n"
+            f"📝 Сообщение:\n{message.text.strip()}\n\n"
+            f"📅 Дата: {datetime.now().strftime('%d.%m.%Y %H:%M')}"
+        )
+        
+        for admin_id in ADMIN_IDS:
+            try:
+                await bot.send_message(
+                    admin_id, 
+                    admin_notification, 
+                    parse_mode="Markdown",
+                    reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                        [InlineKeyboardButton(
+                            text="✅ Ответить", 
+                            callback_data=f"reply_ticket_{ticket.id}_{message.from_user.id}",
+                            style="success"
+                        )]
+                    ])
+                )
+            except Exception as e:
+                logging.error(f"Не удалось отправить уведомление админу {admin_id}: {e}")
+        
+        session.close()
+        
+        await message.answer(
+            "✅ *Заявка отправлена!*\n\n"
+            f"🆔 Номер заявки: {ticket.id}\n"
+            "⏳ Ожидайте ответа в ближайшее время.\n"
+            "📱 Наши менеджеры свяжутся с вами в этом чате.",
+            parse_mode="Markdown",
+            reply_markup=main_menu()
+        )
+        
+        await state.clear()
+        await state.set_state(ShopStates.browsing)
+        
+    except Exception as e:
+        session.rollback()
+        session.close()
+        logging.error(f"Ошибка при создании заявки: {e}")
+        await message.answer(
+            "❌ Произошла ошибка при отправке заявки.\n"
+            "Попробуйте позже или напишите менеджеру напрямую: @KosmossShop_Supp",
+            reply_markup=main_menu()
+        )
+        await state.clear()
+        await state.set_state(ShopStates.browsing)
 
-    for admin_id in ADMIN_IDS:
-        await bot.send_message(admin_id, f"📨 *Новая заявка в поддержку!*\n\n👤 Пользователь: {message.from_user.first_name}\n🆔 ID: {message.from_user.id}\n📝 Сообщение:\n{message.text}", parse_mode="Markdown")
+# ==================== ОТВЕТ АДМИНА НА ЗАЯВКУ ====================
+@dp.callback_query(F.data.startswith("reply_ticket_"))
+async def reply_to_ticket(callback: types.CallbackQuery, state: FSMContext):
+    if not is_admin(callback.from_user.id):
+        await callback.answer("❌ Нет доступа")
+        return
+    
+    parts = callback.data.split("_")
+    ticket_id = int(parts[2])
+    user_id = int(parts[3])
+    
+    await state.update_data(
+        reply_ticket_id=ticket_id,
+        reply_user_id=user_id
+    )
+    
+    await callback.message.answer(
+        f"✉️ *Ответ на заявку #{ticket_id}*\n\n"
+        f"Введите сообщение для пользователя:",
+        parse_mode="Markdown",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="❌ Отменить", callback_data="admin_panel", style="danger")]
+        ])
+    )
+    await state.set_state(ShopStates.admin_reply_ticket)
+    await callback.answer()
 
+@dp.message(ShopStates.admin_reply_ticket)
+async def process_admin_reply(message: types.Message, state: FSMContext):
+    if not is_admin(message.from_user.id):
+        return
+    
+    data = await state.get_data()
+    ticket_id = data.get('reply_ticket_id')
+    user_id = data.get('reply_user_id')
+    
+    if not ticket_id or not user_id:
+        await message.answer("❌ Ошибка: данные заявки не найдены", reply_markup=admin_menu())
+        await state.clear()
+        return
+    
+    if not message.text or len(message.text.strip()) == 0:
+        await message.answer(
+            "❌ Сообщение не может быть пустым!",
+            reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+                [InlineKeyboardButton(text="❌ Отменить", callback_data="admin_panel", style="danger")]
+            ])
+        )
+        return
+    
+    try:
+        session = Session()
+        ticket = session.query(SupportTicket).get(ticket_id)
+        if ticket:
+            ticket.status = 'answered'
+            ticket.answered_at = datetime.now()
+            ticket.answer = message.text.strip()
+            session.commit()
+        session.close()
+        
+        try:
+            await bot.send_message(
+                user_id,
+                f"📨 *Ответ на вашу заявку #{ticket_id}*\n\n"
+                f"Сообщение от поддержки:\n{message.text.strip()}\n\n"
+                f"Если у вас остались вопросы, создайте новую заявку.",
+                parse_mode="Markdown",
+                reply_markup=main_menu()
+            )
+            await message.answer(
+                f"✅ Ответ отправлен пользователю!\n"
+                f"🆔 Заявка #{ticket_id} помечена как обработанная.",
+                reply_markup=admin_menu()
+            )
+        except Exception as e:
+            logging.error(f"Не удалось отправить ответ пользователю {user_id}: {e}")
+            await message.answer(
+                f"⚠️ Не удалось отправить сообщение пользователю.\n"
+                f"Возможно, пользователь заблокировал бота.\n"
+                f"Заявка #{ticket_id} помечена как обработанная.",
+                reply_markup=admin_menu()
+            )
+        
+        await state.clear()
+        
+    except Exception as e:
+        logging.error(f"Ошибка при обработке ответа на заявку: {e}")
+        await message.answer(
+            "❌ Произошла ошибка при отправке ответа.",
+            reply_markup=admin_menu()
+        )
+        await state.clear()
+
+# ==================== ПРОСМОТР ВСЕХ ЗАЯВОК (АДМИН) ====================
+@dp.callback_query(F.data == "admin_tickets")
+async def admin_tickets(callback: types.CallbackQuery):
+    if not is_admin(callback.from_user.id):
+        await callback.answer("❌ Нет доступа")
+        return
+    
+    session = Session()
+    tickets = session.query(SupportTicket).filter_by(status='open').order_by(SupportTicket.created_at.desc()).all()
     session.close()
-    await message.answer("✅ *Заявка отправлена!*\n\nМы свяжемся с вами в ближайшее время.", parse_mode="Markdown", reply_markup=main_menu())
-    await state.set_state(ShopStates.browsing)
+    
+    if not tickets:
+        await callback.message.edit_text(
+            "📋 *Заявки в поддержку*\n\n✅ Нет открытых заявок.",
+            parse_mode="Markdown",
+            reply_markup=admin_menu()
+        )
+        await callback.answer()
+        return
+    
+    text = "📋 *Открытые заявки:*\n\n"
+    for ticket in tickets:
+        user = session.query(User).get(ticket.user_id)
+        username = user.first_name if user else "Неизвестный"
+        text += f"🆔 #{ticket.id} | {username} | {ticket.created_at.strftime('%d.%m.%Y %H:%M')}\n"
+        text += f"📝 {ticket.message[:50]}...\n\n"
+    
+    await callback.message.edit_text(
+        text,
+        parse_mode="Markdown",
+        reply_markup=InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="🔄 Обновить", callback_data="admin_tickets", style="primary")],
+            [InlineKeyboardButton(text="◀️ Назад", callback_data="admin_panel", style="danger")]
+        ])
+    )
+    await callback.answer()
 
 # ==================== ПРОФИЛЬ ====================
 @dp.callback_query(F.data == "profile")
@@ -621,9 +857,11 @@ async def admin_users(callback: types.CallbackQuery):
         return
 
     text = "👥 *Список пользователей:*\n\n"
+    session = Session()
     for user in users:
         orders_count = session.query(Order).filter_by(user_id=user.id).count()
         text += f"🆔 {user.telegram_id} | {user.first_name or 'Без имени'} | 💰 {user.balance}$ | 📦 {orders_count} покупок\n"
+    session.close()
 
     await callback.message.edit_text(text, parse_mode="Markdown", reply_markup=admin_menu())
     await callback.answer()
@@ -651,6 +889,16 @@ async def admin_stats(callback: types.CallbackQuery):
         reply_markup=admin_menu()
     )
     await callback.answer()
+
+# ==================== КОМАНДА /CANCEL ====================
+@dp.message(Command("cancel"))
+async def cancel_command(message: types.Message, state: FSMContext):
+    await state.clear()
+    await state.set_state(ShopStates.browsing)
+    await message.answer(
+        "❌ Действие отменено.",
+        reply_markup=main_menu()
+    )
 
 # ==================== НЕИЗВЕСТНЫЕ ====================
 @dp.message()
