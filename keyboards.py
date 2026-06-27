@@ -1,28 +1,6 @@
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton
 
 
-# ==================== ОБЫЧНЫЕ КНОПКИ ДЛЯ МЕНЮ ====================
-def main_menu_keyboard():
-    return ReplyKeyboardMarkup(
-        keyboard=[
-            [KeyboardButton(text="📂 Категории")],
-            [KeyboardButton(text="ℹ️ Информация")],
-            [KeyboardButton(text="🔄 Техподдержка")],
-            [KeyboardButton(text="👤 Профиль")]
-        ],
-        resize_keyboard=True
-    )
-
-def back_keyboard():
-    return ReplyKeyboardMarkup(
-        keyboard=[
-            [KeyboardButton(text="◀️ Назад")]
-        ],
-        resize_keyboard=True
-    )
-
-
-# ==================== ИНЛАЙН КНОПКИ ====================
 def product_detail_keyboard(product_id, in_stock=True):
     buttons = []
 
@@ -110,32 +88,6 @@ def cancel_deposit_keyboard():
     ])
 
 
-def support_keyboard():
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [
-            InlineKeyboardButton(
-                text="📝 Подать заявку",
-                callback_data="submit_ticket",
-                style="primary"
-            )
-        ],
-        [
-            InlineKeyboardButton(
-                text="👨‍💼 Написать менеджеру",
-                url="https://t.me/KosmossShop_Supp",
-                style="success"
-            )
-        ],
-        [
-            InlineKeyboardButton(
-                text="◀️ Назад",
-                callback_data="back_to_welcome",
-                style="danger"
-            )
-        ]
-    ])
-
-
 def admin_keyboard():
     return InlineKeyboardMarkup(inline_keyboard=[
         [
@@ -171,18 +123,6 @@ def admin_keyboard():
                 text="◀️ Выход",
                 callback_data="back_to_welcome",
                 style="danger"
-            )
-        ]
-    ])
-
-
-def back_to_menu_keyboard():
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [
-            InlineKeyboardButton(
-                text="◀️ Назад в меню",
-                callback_data="back_to_welcome",
-                style="primary"
             )
         ]
     ])
