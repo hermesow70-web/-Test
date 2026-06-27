@@ -24,7 +24,6 @@ init_db()
 def main_menu():
     return InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="📂 Категории", callback_data="categories", style="success")],
-        [InlineKeyboardButton(text="ℹ️ Информация", callback_data="info", style="primary")],
         [InlineKeyboardButton(text="🔄 Техподдержка", callback_data="support", style="danger")],
         [InlineKeyboardButton(text="👤 Профиль", callback_data="profile", style="primary")]
     ])
@@ -177,7 +176,6 @@ async def buy_handler(callback: types.CallbackQuery):
         await callback.answer()
         return
 
-    # Подтверждение
     buttons = [
         [InlineKeyboardButton(text="✅ Подтвердить", callback_data=f"confirm_buy_{product_id}", style="success")],
         [InlineKeyboardButton(text="◀️ Отмена", callback_data=f"product_{product_id}", style="danger")]
@@ -211,16 +209,6 @@ async def confirm_buy_handler(callback: types.CallbackQuery):
 
     await callback.message.edit_text(f"✅ *Покупка успешна!*\n\n📦 Товар: {product.name}\n💰 Стоимость: {product.price}$\n💳 Остаток баланса: {user.balance}$\n\n⏳ Ожидайте выдачу товара в течение 5 минут.", parse_mode="Markdown", reply_markup=main_menu())
     await callback.answer("🎉 Поздравляем с покупкой!")
-
-# ==================== ИНФОРМАЦИЯ ====================
-@dp.callback_query(F.data == "info")
-async def info_handler(callback: types.CallbackQuery):
-    await callback.message.edit_text(
-        "ℹ️ *Информация о боте*\n\n🏪 Название магазина: *Kosmos Shop*\n📅 Создан: 14.02.2026\n📦 Продано товаров за Май: 183 товаров\n🆘 Тех поддержка: @KosmossShop_Supp\n\n⭐️ Спасибо, что выбираете нас!",
-        parse_mode="Markdown",
-        reply_markup=back_menu()
-    )
-    await callback.answer()
 
 # ==================== ПОДДЕРЖКА ====================
 @dp.callback_query(F.data == "support")
@@ -302,6 +290,32 @@ async def process_deposit(message: types.Message, state: FSMContext):
     except:
         await message.answer("❌ Введите число\nПример: `10` или `15.5`", parse_mode="Markdown", reply_markup=cancel_menu())
 
+# ==================== ЗАЯВКА В ПОДДЕРЖКУ ====================
+@dp.callback_query(F.data == "submit_ticket")
+async def submit_ticket(callback: types.CallbackQuery, state: FSMContext):
+    await callback.message.edit_text(
+        "📝 *Подача заявки*\n\nОпишите вашу проблему подробно.\nМы свяжемся с вами в ближайшее время.\n\n❌ Для отмены отправьте /cancel",
+        parse_mode="Markdown"
+    )
+    await state.set_state(ShopStates.support_ticket)
+    await callback.answer()
+
+@dp.message(ShopStates.support_ticket)
+async def process_ticket(message: types.Message, state: FSMContext):
+    session = Session()
+    user = session.query(User).filter_by(telegram_id=message.from_user.id).first()
+
+    ticket = SupportTicket(user_id=user.id, message=message.text, status='open')
+    session.add(ticket)
+    session.commit()
+
+    for admin_id in ADMIN_IDS:
+        await bot.send_message(admin_id, f"📨 *Новая заявка в поддержку!*\n\n👤 Пользователь: {message.from_user.first_name}\n🆔 ID: {message.from_user.id}\n📝 Сообщение:\n{message.text}", parse_mode="Markdown")
+
+    session.close()
+    await message.answer("✅ *Заявка отправлена!*\n\nМы свяжемся с вами в ближайшее время.", parse_mode="Markdown", reply_markup=main_menu())
+    await state.set_state(ShopStates.browsing)
+
 # ==================== АДМИНКА ====================
 @dp.message(Command("adm"))
 async def admin_panel(message: types.Message):
@@ -320,6 +334,57 @@ async def admin_panel(message: types.Message):
         parse_mode="Markdown",
         reply_markup=admin_menu()
     )
+
+# ==================== АДМИН-ОБРАБОТЧИКИ ====================
+@dp.callback_query(F.data == "admin_mailing")
+async def admin_mailing(callback: types.CallbackQuery, state: FSMContext):
+    if not is_admin(callback.from_user.id):
+        await callback.answer("❌ Нет доступа")
+        return
+    await callback.message.edit_text("📨 *Рассылка*\n\nОтправьте сообщение для рассылки:", parse_mode="Markdown", reply_markup=cancel_menu())
+    await state.set_state(ShopStates.admin_mailing)
+    await callback.answer()
+
+@dp.message(ShopStates.admin_mailing)
+async def process_admin_mailing(message: types.Message, state: FSMContext):
+    if not is_admin(message.from_user.id):
+        return
+
+    session = Session()
+    users = session.query(User).all()
+    session.close()
+
+    success = 0
+    for user in users:
+        try:
+            await bot.send_message(user.telegram_id, message.text)
+            success += 1
+            await asyncio.sleep(0.05)
+        except:
+            pass
+
+    await message.answer(f"✅ Рассылка завершена!\n📤 Отправлено: {success}", reply_markup=main_menu())
+    await state.set_state(ShopStates.browsing)
+
+@dp.callback_query(F.data == "admin_add_product")
+async def admin_add_product(callback: types.CallbackQuery, state: FSMContext):
+    if not is_admin(callback.from_user.id):
+        await callback.answer("❌ Нет доступа")
+        return
+
+    session = Session()
+    categories = session.query(Category).all()
+    session.close()
+
+    if not categories:
+        await callback.message.edit_text("❌ Нет категорий! Сначала создайте категорию через /add_category <название>", reply_markup=back_menu())
+        await callback.answer()
+        return
+
+    cat_list = "\n".join([f"• {cat.id}: {cat.name}" for cat in categories])
+    await callback.message.edit_text(f"➕ *Добавление товара*\n\n📂 *Категории:*\n{cat_list}\n\nВведите *ID категории*:", parse_mode="Markdown", reply_markup=cancel_menu())
+    await state.set_state(ShopStates.admin_add_product)
+    await callback.answer()
 
 # ==================== НЕИЗВЕСТНЫЕ ====================
 @dp.message()
