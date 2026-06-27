@@ -1,5 +1,4 @@
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-from database import Category, Product, Session
 
 
 def welcome_keyboard():
@@ -35,57 +34,6 @@ def welcome_keyboard():
     ])
 
 
-def categories_keyboard():
-    session = Session()
-    categories = session.query(Category).all()
-    session.close()
-
-    buttons = []
-    for cat in categories:
-        session = Session()
-        count = session.query(Product).filter_by(category_id=cat.id).count()
-        session.close()
-
-        buttons.append([
-            InlineKeyboardButton(
-                text=f"📁 {cat.name} ({count})",
-                callback_data=f"category_{cat.id}",
-                style="primary"
-            )
-        ])
-
-    buttons.append([
-        InlineKeyboardButton(
-            text="◀️ Назад в меню",
-            callback_data="back_to_welcome",
-            style="danger"
-        )
-    ])
-    return InlineKeyboardMarkup(inline_keyboard=buttons)
-
-
-def products_keyboard(products, category_id):
-    buttons = []
-    for product in products:
-        stock_emoji = "🟢" if product.stock > 0 else "🔴"
-        buttons.append([
-            InlineKeyboardButton(
-                text=f"{product.name} | {product.price}$ | {stock_emoji} {product.stock}шт",
-                callback_data=f"product_{product.id}",
-                style="primary" if product.stock > 0 else "danger"
-            )
-        ])
-
-    buttons.append([
-        InlineKeyboardButton(
-            text="◀️ Назад к категориям",
-            callback_data="back_to_categories",
-            style="danger"
-        )
-    ])
-    return InlineKeyboardMarkup(inline_keyboard=buttons)
-
-
 def product_detail_keyboard(product_id, in_stock=True):
     buttons = []
 
@@ -109,7 +57,7 @@ def product_detail_keyboard(product_id, in_stock=True):
     buttons.append([
         InlineKeyboardButton(
             text="◀️ Назад",
-            callback_data=f"back_to_products_{product_id}",
+            callback_data="back_to_welcome",
             style="primary"
         )
     ])
@@ -128,7 +76,7 @@ def buy_confirm_keyboard(product_id):
         [
             InlineKeyboardButton(
                 text="◀️ Отмена",
-                callback_data=f"back_to_products_{product_id}",
+                callback_data="back_to_welcome",
                 style="danger"
             )
         ]
@@ -155,18 +103,6 @@ def profile_keyboard():
             InlineKeyboardButton(
                 text="◀️ Назад в меню",
                 callback_data="back_to_welcome",
-                style="danger"
-            )
-        ]
-    ])
-
-
-def deposit_keyboard():
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [
-            InlineKeyboardButton(
-                text="◀️ Назад в профиль",
-                callback_data="back_to_profile",
                 style="danger"
             )
         ]
@@ -241,18 +177,6 @@ def back_to_profile_keyboard():
             InlineKeyboardButton(
                 text="◀️ Назад в профиль",
                 callback_data="back_to_profile",
-                style="primary"
-            )
-        ]
-    ])
-
-
-def back_to_categories_keyboard():
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [
-            InlineKeyboardButton(
-                text="◀️ Назад к категориям",
-                callback_data="back_to_categories",
                 style="primary"
             )
         ]
