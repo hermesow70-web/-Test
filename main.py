@@ -49,8 +49,9 @@ def profile_menu():
 
 def admin_menu():
     return InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="📂 Добавить категорию", callback_data="admin_add_category", style="success")],
+        [InlineKeyboardButton(text="➕ Добавить товар", callback_data="admin_add_product", style="primary")],
         [InlineKeyboardButton(text="📨 Рассылка", callback_data="admin_mailing", style="primary")],
-        [InlineKeyboardButton(text="➕ Добавить товар", callback_data="admin_add_product", style="success")],
         [InlineKeyboardButton(text="👥 Пользователи", callback_data="admin_users", style="primary")],
         [InlineKeyboardButton(text="📊 Статистика", callback_data="admin_stats", style="primary")],
         [InlineKeyboardButton(text="◀️ Выход", callback_data="back_to_main", style="danger")]
@@ -220,6 +221,31 @@ async def support_handler(callback: types.CallbackQuery):
     )
     await callback.answer()
 
+@dp.callback_query(F.data == "submit_ticket")
+async def submit_ticket(callback: types.CallbackQuery, state: FSMContext):
+    await callback.message.edit_text(
+        "📝 *Подача заявки*\n\nОпишите вашу проблему подробно.\nМы свяжемся с вами в ближайшее время.\n\n❌ Для отмены отправьте /cancel",
+        parse_mode="Markdown"
+    )
+    await state.set_state(ShopStates.support_ticket)
+    await callback.answer()
+
+@dp.message(ShopStates.support_ticket)
+async def process_ticket(message: types.Message, state: FSMContext):
+    session = Session()
+    user = session.query(User).filter_by(telegram_id=message.from_user.id).first()
+
+    ticket = SupportTicket(user_id=user.id, message=message.text, status='open')
+    session.add(ticket)
+    session.commit()
+
+    for admin_id in ADMIN_IDS:
+        await bot.send_message(admin_id, f"📨 *Новая заявка в поддержку!*\n\n👤 Пользователь: {message.from_user.first_name}\n🆔 ID: {message.from_user.id}\n📝 Сообщение:\n{message.text}", parse_mode="Markdown")
+
+    session.close()
+    await message.answer("✅ *Заявка отправлена!*\n\nМы свяжемся с вами в ближайшее время.", parse_mode="Markdown", reply_markup=main_menu())
+    await state.set_state(ShopStates.browsing)
+
 # ==================== ПРОФИЛЬ ====================
 @dp.callback_query(F.data == "profile")
 async def profile_handler(callback: types.CallbackQuery):
@@ -290,33 +316,7 @@ async def process_deposit(message: types.Message, state: FSMContext):
     except:
         await message.answer("❌ Введите число\nПример: `10` или `15.5`", parse_mode="Markdown", reply_markup=cancel_menu())
 
-# ==================== ЗАЯВКА В ПОДДЕРЖКУ ====================
-@dp.callback_query(F.data == "submit_ticket")
-async def submit_ticket(callback: types.CallbackQuery, state: FSMContext):
-    await callback.message.edit_text(
-        "📝 *Подача заявки*\n\nОпишите вашу проблему подробно.\nМы свяжемся с вами в ближайшее время.\n\n❌ Для отмены отправьте /cancel",
-        parse_mode="Markdown"
-    )
-    await state.set_state(ShopStates.support_ticket)
-    await callback.answer()
-
-@dp.message(ShopStates.support_ticket)
-async def process_ticket(message: types.Message, state: FSMContext):
-    session = Session()
-    user = session.query(User).filter_by(telegram_id=message.from_user.id).first()
-
-    ticket = SupportTicket(user_id=user.id, message=message.text, status='open')
-    session.add(ticket)
-    session.commit()
-
-    for admin_id in ADMIN_IDS:
-        await bot.send_message(admin_id, f"📨 *Новая заявка в поддержку!*\n\n👤 Пользователь: {message.from_user.first_name}\n🆔 ID: {message.from_user.id}\n📝 Сообщение:\n{message.text}", parse_mode="Markdown")
-
-    session.close()
-    await message.answer("✅ *Заявка отправлена!*\n\nМы свяжемся с вами в ближайшее время.", parse_mode="Markdown", reply_markup=main_menu())
-    await state.set_state(ShopStates.browsing)
-
-# ==================== АДМИНКА ====================
+# ==================== АДМИН-ПАНЕЛЬ ====================
 @dp.message(Command("adm"))
 async def admin_panel(message: types.Message):
     if not is_admin(message.from_user.id):
@@ -334,6 +334,245 @@ async def admin_panel(message: types.Message):
         parse_mode="Markdown",
         reply_markup=admin_menu()
     )
+
+# ==================== ДОБАВЛЕНИЕ КАТЕГОРИИ ====================
+@dp.callback_query(F.data == "admin_add_category")
+async def admin_add_category(callback: types.CallbackQuery, state: FSMContext):
+    if not is_admin(callback.from_user.id):
+        await callback.answer("❌ Нет доступа")
+        return
+
+    await callback.message.edit_text(
+        "📂 *Добавление категории*\n\nВведите *название категории*:",
+        parse_mode="Markdown",
+        reply_markup=cancel_menu()
+    )
+    await state.set_state(ShopStates.admin_add_category)
+    await callback.answer()
+
+@dp.message(ShopStates.admin_add_category)
+async def process_add_category(message: types.Message, state: FSMContext):
+    if not is_admin(message.from_user.id):
+        return
+
+    category_name = message.text.strip()
+    if not category_name:
+        await message.answer("❌ Название не может быть пустым!")
+        return
+
+    session = Session()
+    existing = session.query(Category).filter_by(name=category_name).first()
+    if existing:
+        await message.answer(f"❌ Категория '{category_name}' уже существует!", reply_markup=admin_menu())
+        session.close()
+        await state.set_state(ShopStates.browsing)
+        return
+
+    category = Category(name=category_name)
+    session.add(category)
+    session.commit()
+    session.close()
+
+    await message.answer(f"✅ Категория '{category_name}' создана!", reply_markup=admin_menu())
+    await state.set_state(ShopStates.browsing)
+
+# ==================== ДОБАВЛЕНИЕ ТОВАРА ====================
+@dp.callback_query(F.data == "admin_add_product")
+async def admin_add_product(callback: types.CallbackQuery, state: FSMContext):
+    if not is_admin(callback.from_user.id):
+        await callback.answer("❌ Нет доступа")
+        return
+
+    session = Session()
+    categories = session.query(Category).all()
+    session.close()
+
+    if not categories:
+        await callback.message.edit_text(
+            "❌ Нет категорий!\nСначала добавьте категорию через админ-панель.",
+            reply_markup=admin_menu()
+        )
+        await callback.answer()
+        return
+
+    cat_list = "\n".join([f"• {cat.id}: {cat.name}" for cat in categories])
+    await callback.message.edit_text(
+        f"➕ *Добавление товара* (шаг 1/5)\n\n📂 *Доступные категории:*\n{cat_list}\n\nВведите *ID категории*:",
+        parse_mode="Markdown",
+        reply_markup=cancel_menu()
+    )
+    await state.set_state(ShopStates.admin_add_product_category)
+    await callback.answer()
+
+@dp.message(ShopStates.admin_add_product_category)
+async def process_add_product_category(message: types.Message, state: FSMContext):
+    if not is_admin(message.from_user.id):
+        return
+
+    try:
+        category_id = int(message.text.strip())
+        session = Session()
+        category = session.query(Category).get(category_id)
+        session.close()
+
+        if not category:
+            await message.answer("❌ Категория не найдена! Попробуйте снова:", reply_markup=cancel_menu())
+            return
+
+        await state.update_data(category_id=category_id)
+        await message.answer(
+            f"✅ Категория выбрана: {category.name}\n\n➕ *Добавление товара* (шаг 2/5)\n\nВведите *название товара*:",
+            parse_mode="Markdown",
+            reply_markup=cancel_menu()
+        )
+        await state.set_state(ShopStates.admin_add_product_name)
+    except ValueError:
+        await message.answer("❌ Введите число (ID категории):", reply_markup=cancel_menu())
+
+@dp.message(ShopStates.admin_add_product_name)
+async def process_add_product_name(message: types.Message, state: FSMContext):
+    if not is_admin(message.from_user.id):
+        return
+
+    product_name = message.text.strip()
+    if not product_name:
+        await message.answer("❌ Название не может быть пустым!", reply_markup=cancel_menu())
+        return
+
+    await state.update_data(product_name=product_name)
+    await message.answer(
+        f"➕ *Добавление товара* (шаг 3/5)\n\nВведите *описание товара*:",
+        parse_mode="Markdown",
+        reply_markup=cancel_menu()
+    )
+    await state.set_state(ShopStates.admin_add_product_description)
+
+@dp.message(ShopStates.admin_add_product_description)
+async def process_add_product_description(message: types.Message, state: FSMContext):
+    if not is_admin(message.from_user.id):
+        return
+
+    await state.update_data(product_description=message.text)
+    await message.answer(
+        f"➕ *Добавление товара* (шаг 4/5)\n\nВведите *цену* товара (в $):\nПример: `10`, `15.5`, `100`",
+        parse_mode="Markdown",
+        reply_markup=cancel_menu()
+    )
+    await state.set_state(ShopStates.admin_add_product_price)
+
+@dp.message(ShopStates.admin_add_product_price)
+async def process_add_product_price(message: types.Message, state: FSMContext):
+    if not is_admin(message.from_user.id):
+        return
+
+    try:
+        price = float(message.text.replace(',', '.'))
+        if price < 0:
+            raise ValueError
+        await state.update_data(product_price=price)
+        await message.answer(
+            f"➕ *Добавление товара* (шаг 5/5)\n\nВведите *количество* товара (в наличии):",
+            parse_mode="Markdown",
+            reply_markup=cancel_menu()
+        )
+        await state.set_state(ShopStates.admin_add_product_stock)
+    except ValueError:
+        await message.answer("❌ Введите корректную цену (число):", reply_markup=cancel_menu())
+
+@dp.message(ShopStates.admin_add_product_stock)
+async def process_add_product_stock(message: types.Message, state: FSMContext):
+    if not is_admin(message.from_user.id):
+        return
+
+    try:
+        stock = int(message.text.strip())
+        if stock < 0:
+            raise ValueError
+
+        data = await state.get_data()
+        session = Session()
+
+        product = Product(
+            name=data['product_name'],
+            description=data['product_description'],
+            price=data['product_price'],
+            stock=stock,
+            category_id=data['category_id']
+        )
+        session.add(product)
+        session.commit()
+
+        category = session.query(Category).get(data['category_id'])
+        session.close()
+
+        await message.answer(
+            f"✅ *Товар добавлен!*\n\n"
+            f"📦 Название: {data['product_name']}\n"
+            f"📂 Категория: {category.name}\n"
+            f"💰 Цена: {data['product_price']}$\n"
+            f"📦 В наличии: {stock} шт.\n\n"
+            f"📸 Чтобы добавить фото, используйте команду /add_photo <id_товара>",
+            parse_mode="Markdown",
+            reply_markup=admin_menu()
+        )
+        await state.clear()
+        await state.set_state(ShopStates.browsing)
+
+    except ValueError:
+        await message.answer("❌ Введите целое число (количество):", reply_markup=cancel_menu())
+
+# ==================== ДОБАВЛЕНИЕ ФОТО К ТОВАРУ ====================
+@dp.message(Command("add_photo"))
+async def add_photo_command(message: types.Message, state: FSMContext):
+    if not is_admin(message.from_user.id):
+        await message.answer("❌ Нет доступа")
+        return
+
+    args = message.text.split()
+    if len(args) < 2:
+        await message.answer("❌ Использование: /add_photo <id_товара>\nПример: /add_photo 1")
+        return
+
+    try:
+        product_id = int(args[1])
+        await state.update_data(product_id=product_id)
+        await message.answer(
+            f"📸 *Добавление фото к товару ID: {product_id}*\n\nОтправьте фото:",
+            parse_mode="Markdown",
+            reply_markup=cancel_menu()
+        )
+        await state.set_state(ShopStates.admin_add_product_photo)
+    except ValueError:
+        await message.answer("❌ Введите число (ID товара)")
+
+@dp.message(ShopStates.admin_add_product_photo)
+async def process_add_photo(message: types.Message, state: FSMContext):
+    if not is_admin(message.from_user.id):
+        return
+
+    if not message.photo:
+        await message.answer("❌ Отправьте фото!", reply_markup=cancel_menu())
+        return
+
+    data = await state.get_data()
+    product_id = data.get('product_id')
+
+    session = Session()
+    product = session.query(Product).get(product_id)
+    if not product:
+        await message.answer("❌ Товар не найден!", reply_markup=admin_menu())
+        session.close()
+        await state.clear()
+        await state.set_state(ShopStates.browsing)
+        return
+
+    product.photo_id = message.photo[-1].file_id
+    session.commit()
+    session.close()
+
+    await message.answer(f"✅ Фото добавлено к товару ID: {product_id}!", reply_markup=admin_menu())
+    await state.clear()
+    await state.set_state(ShopStates.browsing)
 
 # ==================== АДМИН-ОБРАБОТЧИКИ ====================
 @dp.callback_query(F.data == "admin_mailing")
@@ -363,27 +602,54 @@ async def process_admin_mailing(message: types.Message, state: FSMContext):
         except:
             pass
 
-    await message.answer(f"✅ Рассылка завершена!\n📤 Отправлено: {success}", reply_markup=main_menu())
+    await message.answer(f"✅ Рассылка завершена!\n📤 Отправлено: {success}", reply_markup=admin_menu())
     await state.set_state(ShopStates.browsing)
 
-@dp.callback_query(F.data == "admin_add_product")
-async def admin_add_product(callback: types.CallbackQuery, state: FSMContext):
+@dp.callback_query(F.data == "admin_users")
+async def admin_users(callback: types.CallbackQuery):
     if not is_admin(callback.from_user.id):
         await callback.answer("❌ Нет доступа")
         return
 
     session = Session()
-    categories = session.query(Category).all()
+    users = session.query(User).all()
     session.close()
 
-    if not categories:
-        await callback.message.edit_text("❌ Нет категорий! Сначала создайте категорию через /add_category <название>", reply_markup=back_menu())
+    if not users:
+        await callback.message.edit_text("📊 Пользователей пока нет.", reply_markup=admin_menu())
         await callback.answer()
         return
 
-    cat_list = "\n".join([f"• {cat.id}: {cat.name}" for cat in categories])
-    await callback.message.edit_text(f"➕ *Добавление товара*\n\n📂 *Категории:*\n{cat_list}\n\nВведите *ID категории*:", parse_mode="Markdown", reply_markup=cancel_menu())
-    await state.set_state(ShopStates.admin_add_product)
+    text = "👥 *Список пользователей:*\n\n"
+    for user in users:
+        orders_count = session.query(Order).filter_by(user_id=user.id).count()
+        text += f"🆔 {user.telegram_id} | {user.first_name or 'Без имени'} | 💰 {user.balance}$ | 📦 {orders_count} покупок\n"
+
+    await callback.message.edit_text(text, parse_mode="Markdown", reply_markup=admin_menu())
+    await callback.answer()
+
+@dp.callback_query(F.data == "admin_stats")
+async def admin_stats(callback: types.CallbackQuery):
+    if not is_admin(callback.from_user.id):
+        await callback.answer("❌ Нет доступа")
+        return
+
+    session = Session()
+    users_count = session.query(User).count()
+    orders_count = session.query(Order).count()
+    paid_orders = session.query(Order).filter_by(status='paid').count()
+    total_revenue = session.query(Order).filter_by(status='paid').with_entities(func.sum(Order.total)).scalar() or 0
+    session.close()
+
+    await callback.message.edit_text(
+        f"📊 *Статистика*\n\n"
+        f"👥 Всего пользователей: {users_count}\n"
+        f"📦 Всего заказов: {orders_count}\n"
+        f"✅ Оплаченных: {paid_orders}\n"
+        f"💰 Выручка: {round(total_revenue, 2)}$",
+        parse_mode="Markdown",
+        reply_markup=admin_menu()
+    )
     await callback.answer()
 
 # ==================== НЕИЗВЕСТНЫЕ ====================
@@ -393,6 +659,7 @@ async def unknown(message: types.Message):
 
 # ==================== ЗАПУСК ====================
 async def main():
+    await bot.delete_webhook()
     print("🚀 БОТ ЗАПУЩЕН!")
     await dp.start_polling(bot)
 
