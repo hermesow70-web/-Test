@@ -1,39 +1,28 @@
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, ReplyKeyboardMarkup, KeyboardButton
 
 
-def welcome_keyboard():
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [
-            InlineKeyboardButton(
-                text="📂 Категории",
-                callback_data="categories",
-                style="success"
-            )
+# ==================== ОБЫЧНЫЕ КНОПКИ ДЛЯ МЕНЮ ====================
+def main_menu_keyboard():
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="📂 Категории")],
+            [KeyboardButton(text="ℹ️ Информация")],
+            [KeyboardButton(text="🔄 Техподдержка")],
+            [KeyboardButton(text="👤 Профиль")]
         ],
-        [
-            InlineKeyboardButton(
-                text="ℹ️ Информация",
-                callback_data="info",
-                style="primary"
-            )
+        resize_keyboard=True
+    )
+
+def back_keyboard():
+    return ReplyKeyboardMarkup(
+        keyboard=[
+            [KeyboardButton(text="◀️ Назад")]
         ],
-        [
-            InlineKeyboardButton(
-                text="🔄 Замены/Тех Поддержка",
-                callback_data="support",
-                style="danger"
-            )
-        ],
-        [
-            InlineKeyboardButton(
-                text="👤 Профиль",
-                callback_data="profile",
-                style="primary"
-            )
-        ]
-    ])
+        resize_keyboard=True
+    )
 
 
+# ==================== ИНЛАЙН КНОПКИ ====================
 def product_detail_keyboard(product_id, in_stock=True):
     buttons = []
 
@@ -101,7 +90,7 @@ def profile_keyboard():
         ],
         [
             InlineKeyboardButton(
-                text="◀️ Назад в меню",
+                text="◀️ Назад",
                 callback_data="back_to_welcome",
                 style="danger"
             )
@@ -114,7 +103,7 @@ def cancel_deposit_keyboard():
         [
             InlineKeyboardButton(
                 text="❌ Отменить пополнение",
-                callback_data="back_to_profile",
+                callback_data="back_to_welcome",
                 style="danger"
             )
         ]
@@ -139,45 +128,9 @@ def support_keyboard():
         ],
         [
             InlineKeyboardButton(
-                text="◀️ Назад в меню",
+                text="◀️ Назад",
                 callback_data="back_to_welcome",
                 style="danger"
-            )
-        ]
-    ])
-
-
-def ticket_sent_keyboard():
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [
-            InlineKeyboardButton(
-                text="◀️ Назад в меню",
-                callback_data="back_to_welcome",
-                style="primary"
-            )
-        ]
-    ])
-
-
-def back_to_menu_keyboard():
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [
-            InlineKeyboardButton(
-                text="◀️ Назад в меню",
-                callback_data="back_to_welcome",
-                style="primary"
-            )
-        ]
-    ])
-
-
-def back_to_profile_keyboard():
-    return InlineKeyboardMarkup(inline_keyboard=[
-        [
-            InlineKeyboardButton(
-                text="◀️ Назад в профиль",
-                callback_data="back_to_profile",
-                style="primary"
             )
         ]
     ])
@@ -218,6 +171,30 @@ def admin_keyboard():
                 text="◀️ Выход",
                 callback_data="back_to_welcome",
                 style="danger"
+            )
+        ]
+    ])
+
+
+def back_to_menu_keyboard():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(
+                text="◀️ Назад в меню",
+                callback_data="back_to_welcome",
+                style="primary"
+            )
+        ]
+    ])
+
+
+def back_to_profile_keyboard():
+    return InlineKeyboardMarkup(inline_keyboard=[
+        [
+            InlineKeyboardButton(
+                text="◀️ Назад в профиль",
+                callback_data="back_to_welcome",
+                style="primary"
             )
         ]
     ])
