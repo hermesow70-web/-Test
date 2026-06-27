@@ -1,5 +1,5 @@
-import asyncio
 import logging
+import asyncio
 from datetime import datetime
 
 from aiogram import Bot, Dispatcher, types, F
@@ -13,7 +13,7 @@ from database import Session, User, Category, Product, Order, SupportTicket, ini
 from keyboards import *
 from states import ShopStates
 from crypto_pay import create_invoice
-from admin import *
+from admin import is_admin, show_admin_panel, start_mailing, process_mailing, add_product_start, process_add_product_category, process_add_product_name, process_add_product_description, process_add_product_price, process_add_product_stock, process_add_product_photo, add_category_command, show_users, show_stats
 from webhook_server import start_webhook_server
 
 logging.basicConfig(level=logging.INFO)
@@ -39,7 +39,6 @@ async def start(message: types.Message, state: FSMContext):
         session.add(user)
         session.commit()
 
-        # Реферальная ссылка
         args = message.text.split()
         if len(args) > 1:
             try:
