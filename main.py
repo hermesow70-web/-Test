@@ -8,13 +8,12 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.storage.memory import MemoryStorage
 from sqlalchemy import func
 
-from config import BOT_TOKEN, ADMIN_IDS, WEBHOOK_URL, WEBHOOK_SECRET
+from config import BOT_TOKEN, ADMIN_IDS
 from database import Session, User, Category, Product, Order, SupportTicket, init_db
 from keyboards import *
 from states import ShopStates
 from crypto_pay import create_invoice
 from admin import is_admin, show_admin_panel, start_mailing, process_mailing, add_product_start, process_add_product_category, process_add_product_name, process_add_product_description, process_add_product_price, process_add_product_stock, process_add_product_photo, add_category_command, show_users, show_stats
-from webhook_server import start_webhook_server
 
 logging.basicConfig(level=logging.INFO)
 bot = Bot(token=BOT_TOKEN)
@@ -599,20 +598,11 @@ async def unknown_message(message: types.Message):
     )
 
 
-# ==================== ЗАПУСК ====================
-async def set_webhook():
-    await bot.set_webhook(
-        url=WEBHOOK_URL,
-        secret_token=WEBHOOK_SECRET
-    )
-    print(f"✅ Webhook установлен: {WEBHOOK_URL}")
-
-
+# ==================== ЗАПУСК (POLLING РЕЖИМ) ====================
 async def main():
-    print("🚀 Бот Kosmos Shop запускается...")
-    await set_webhook()
-    await start_webhook_server()
-
+    print("🚀 Бот Kosmos Shop запускается в режиме polling...")
+    print("✅ Бот готов к работе!")
+    await dp.start_polling(bot)
 
 if __name__ == "__main__":
     asyncio.run(main())
