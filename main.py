@@ -338,15 +338,18 @@ async def process_deposit_amount(message: types.Message, state: FSMContext):
         await state.set_state(ShopStates.browsing)
 
 
-# ==================== ИНФОРМАЦИЯ ====================
+# ==================== ИНФОРМАЦИЯ (ИСПРАВЛЕНА) ====================
 @dp.callback_query(F.data == "info")
 async def show_info(callback: types.CallbackQuery):
-    session = Session()
-    may_orders = session.query(Order).filter(
-        Order.status == 'paid',
-        func.strftime('%m', Order.created_at) == '05'
-    ).count()
-    session.close()
+    try:
+        session = Session()
+        may_orders = session.query(Order).filter(
+            Order.status == 'paid',
+            func.strftime('%m', Order.created_at) == '05'
+        ).count()
+        session.close()
+    except:
+        may_orders = 0
 
     await callback.message.edit_text(
         f"ℹ️ *Информация о боте*\n\n"
@@ -361,7 +364,7 @@ async def show_info(callback: types.CallbackQuery):
     await callback.answer()
 
 
-# ==================== ПОДДЕРЖКА ====================
+# ==================== ПОДДЕРЖКА (ИСПРАВЛЕНА) ====================
 @dp.callback_query(F.data == "support")
 async def show_support(callback: types.CallbackQuery):
     await callback.message.edit_text(
@@ -435,6 +438,45 @@ async def admin_panel(message: types.Message, state: FSMContext):
     await show_admin_panel(message)
     await state.set_state(ShopStates.browsing)
 
+
+# ==================== РУЧНОЕ ПОПОЛНЕНИЕ БАЛАНСА (ДЛЯ АДМИНА) ====================
+@dp.message(Command("add_balance"))
+async def add_balance(message: types.Message):
+    if not is_admin(message.from_user.id):
+        await message.answer("❌ Нет доступа")
+        return
+    
+    args = message.text.split()
+    if len(args) < 3:
+        await message.answer("❌ Использование: /add_balance <telegram_id> <сумма>\nПример: /add_balance 595471006 10")
+        return
+    
+    try:
+        user_id = int(args[1])
+        amount = float(args[2])
+        
+        session = Session()
+        user = session.query(User).filter_by(telegram_id=user_id).first()
+        
+        if user:
+            user.balance += amount
+            session.commit()
+            await message.answer(f"✅ Баланс пользователя {user_id} пополнен на {amount}$\n💰 Новый баланс: {user.balance}$")
+            
+            # Уведомляем пользователя
+            try:
+                await bot.send_message(
+                    user_id,
+                    f"💰 Ваш баланс пополнен на {amount}$ администратором!\n💎 Новый баланс: {user.balance}$"
+                )
+            except:
+                pass
+        else:
+            await message.answer("❌ Пользователь не найден")
+        session.close()
+    except:
+        await message.answer("❌ Ошибка! Используй: /add_balance <id> <сумма>")
+    
 
 @dp.callback_query(F.data == "admin_mailing")
 async def admin_mailing(callback: types.CallbackQuery, state: FSMContext):
@@ -598,11 +640,12 @@ async def unknown_message(message: types.Message):
     )
 
 
-# ==================== ЗАПУСК (POLLING РЕЖИМ) ====================
+# ==================== ЗАПУСК ====================
 async def main():
     print("🚀 Бот Kosmos Shop запускается в режиме polling...")
     print("✅ Бот готов к работе!")
     await dp.start_polling(bot)
+
 
 if __name__ == "__main__":
     asyncio.run(main())
