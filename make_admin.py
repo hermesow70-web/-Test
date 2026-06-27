@@ -3,7 +3,6 @@ from database import Session, User, init_db
 def make_admin():
     init_db()
     session = Session()
-    
     user = session.query(User).filter_by(telegram_id=595471006).first()
     
     if user:
