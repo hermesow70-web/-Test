@@ -1,5 +1,5 @@
 aiogram==3.4.1
-aiocryptopay
+aiocryptopay==0.4.8
 aiohttp==3.9.0
 python-dotenv==1.0.0
 sqlalchemy==2.0.0
