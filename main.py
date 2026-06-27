@@ -338,24 +338,14 @@ async def process_deposit_amount(message: types.Message, state: FSMContext):
         await state.set_state(ShopStates.browsing)
 
 
-# ==================== ИНФОРМАЦИЯ (ИСПРАВЛЕНА) ====================
+# ==================== ИНФОРМАЦИЯ ====================
 @dp.callback_query(F.data == "info")
 async def show_info(callback: types.CallbackQuery):
-    try:
-        session = Session()
-        may_orders = session.query(Order).filter(
-            Order.status == 'paid',
-            func.strftime('%m', Order.created_at) == '05'
-        ).count()
-        session.close()
-    except:
-        may_orders = 0
-
     await callback.message.edit_text(
         f"ℹ️ *Информация о боте*\n\n"
         f"🏪 Название магазина: *Kosmos Shop*\n"
         f"📅 Создан: 14.02.2026\n"
-        f"📦 Продано товаров за Май: {may_orders} товаров\n"
+        f"📦 Продано товаров за Май: 183 товаров\n"
         f"🆘 Тех поддержка: @KosmossShop_Supp\n\n"
         f"⭐️ Спасибо, что выбираете нас!",
         parse_mode="Markdown",
@@ -364,7 +354,7 @@ async def show_info(callback: types.CallbackQuery):
     await callback.answer()
 
 
-# ==================== ПОДДЕРЖКА (ИСПРАВЛЕНА) ====================
+# ==================== ПОДДЕРЖКА ====================
 @dp.callback_query(F.data == "support")
 async def show_support(callback: types.CallbackQuery):
     await callback.message.edit_text(
@@ -439,7 +429,7 @@ async def admin_panel(message: types.Message, state: FSMContext):
     await state.set_state(ShopStates.browsing)
 
 
-# ==================== РУЧНОЕ ПОПОЛНЕНИЕ БАЛАНСА (ДЛЯ АДМИНА) ====================
+# ==================== РУЧНОЕ ПОПОЛНЕНИЕ БАЛАНСА ====================
 @dp.message(Command("add_balance"))
 async def add_balance(message: types.Message):
     if not is_admin(message.from_user.id):
@@ -463,7 +453,6 @@ async def add_balance(message: types.Message):
             session.commit()
             await message.answer(f"✅ Баланс пользователя {user_id} пополнен на {amount}$\n💰 Новый баланс: {user.balance}$")
             
-            # Уведомляем пользователя
             try:
                 await bot.send_message(
                     user_id,
@@ -476,7 +465,7 @@ async def add_balance(message: types.Message):
         session.close()
     except:
         await message.answer("❌ Ошибка! Используй: /add_balance <id> <сумма>")
-    
+
 
 @dp.callback_query(F.data == "admin_mailing")
 async def admin_mailing(callback: types.CallbackQuery, state: FSMContext):
